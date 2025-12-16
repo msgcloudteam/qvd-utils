@@ -23,5 +23,5 @@ parquet = "57.1.0"
 
 [dependencies.pyo3]
 version = "0.27.2"
-features = ["extension-module"]
+features = []
 
