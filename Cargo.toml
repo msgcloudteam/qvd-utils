@@ -1,12 +1,11 @@
 [package]
 name = "qvd"
-version = "0.0.15"
-authors = ["Sam Bentley <samtbentley@gmail.com>"]
-edition = "2018"
+version = "0.1.0"
+authors = ["Tom Schamberger <tom.schamberger@msg.group>"]
+edition = "2024"
 readme = "README.md"
-description = "A library for reading Qlik Sense .qvd file format from Python, written in Rust."
+description = "A tool to transform Qlik Sense .qvd fils to Parquet."
 license = "Apache-2.0"
-repository = "https://github.com/SBentley/qvd-utils"
 keywords = ["python", "rust", "qlik", "sense", "qvd"]
 
 
