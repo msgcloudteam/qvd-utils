@@ -1,12 +1,11 @@
 [package]
 name = "qvd"
-version = "0.0.15"
-authors = ["Sam Bentley <samtbentley@gmail.com>"]
-edition = "2018"
+version = "0.1.0"
+authors = ["Tom Schamberger <tom.schamberger@msg.group>"]
+edition = "2024"
 readme = "README.md"
-description = "A library for reading Qlik Sense .qvd file format from Python, written in Rust."
+description = "A tool to transform Qlik Sense .qvd fils to Parquet."
 license = "Apache-2.0"
-repository = "https://github.com/SBentley/qvd-utils"
 keywords = ["python", "rust", "qlik", "sense", "qvd"]
 
 
@@ -16,11 +15,12 @@ crate-type = ["cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.117", features = ["derive"] }
-quick-xml = { version = "0.20.0", features = ["serialize"]}
-bitvec = "0.19.4"
+serde = { version = "1.0.228", features = ["derive"] }
+quick-xml = { version = "0.38.4", features = ["serialize"]}
+bitvec = "1.0.1"
+parquet = "57.1.0"
 
 [dependencies.pyo3]
-version = "0.12.3"
-features = ["extension-module"]
+version = "0.27.2"
+features = []
 
