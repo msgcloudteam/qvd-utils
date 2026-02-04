@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, Read, Seek, SeekFrom};
@@ -10,6 +11,7 @@ use parquet::column::writer::ColumnWriter;
 use parquet::data_type::ByteArray;
 use parquet::file::properties::WriterProperties;
 use parquet::file::writer::{SerializedColumnWriter, SerializedFileWriter, SerializedRowGroupWriter};
+use parquet::record::Map;
 use parquet::schema::types::Type;
 use quick_xml::de::from_str;
 use crate::qvd_structure::{QvdFieldHeader, QvdTableHeader};
@@ -78,10 +80,17 @@ pub fn qvd_to_parquet(source_file_name: String,
         columns_data.push((field_name, iterator));
     }
     
+    let mut type_dict: HashMap<String, SymbolValue> = HashMap::new();
+
+    for (name, col) in &columns_data {
+        let _type: SymbolValue = col.infer_type();
+        type_dict.insert(name.clone(), _type);
+    }
+
     // Create Parquet Schema
     let mut fields: Vec<Arc<Type>> = Vec::new();
     for (name, col) in &columns_data {
-        let field_type = match col.probe_value() {
+        let field_type = match type_dict.get(name).unwrap() {
             SymbolValue::Str(_, _) => Type::primitive_type_builder(name, PhysicalType::BYTE_ARRAY)
                 .with_repetition(Repetition::OPTIONAL)
                 .with_converted_type(ConvertedType::UTF8)
@@ -117,7 +126,7 @@ pub fn qvd_to_parquet(source_file_name: String,
     for (_, mut col_values) in columns_data {
         let ser_writer: Option<SerializedColumnWriter> = row_group_writer.next_column().map_err(|e| e.to_string())?;
         if let Some(mut col_writer) = ser_writer {
-            match col_values.probe_value() {
+            match type_dict.get(name).unwrap() {
                 SymbolValue::Str(_, _) =>  {
                     if let ColumnWriter::ByteArrayColumnWriter(typed_writer) = col_writer.untyped() {
                         while col_values.has_next(&buf) {
@@ -187,6 +196,26 @@ impl FieldValueIterator {
             Some(value) => value.clone(),
             None => SymbolValue::Int(0)
         }
+    }
+ 
+    fn infer_type(&self) -> SymbolValue {
+        let mut i:usize = 0;
+        let len = self.values.len();
+        let mut _type: SymbolValue = SymbolValue::Int(0);
+        while(i < len) {
+            match self.values.get(i) {
+                Some(SymbolValue::Str(_, _)) => return SymbolValue::Str(0, 0),
+                Some(SymbolValue::Int(_)) => continue,
+                Some(SymbolValue::Double(_)) =>
+                    match _type {
+                        SymbolValue::Int(_) => _type = SymbolValue::Double(0.0),
+                        _ => continue,
+                    }
+                None => continue
+            }
+            i += 1;
+        }
+        _type
     }
 
     /// Check with has_next() before calling this method
