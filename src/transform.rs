@@ -11,7 +11,6 @@ use parquet::column::writer::ColumnWriter;
 use parquet::data_type::ByteArray;
 use parquet::file::properties::WriterProperties;
 use parquet::file::writer::{SerializedColumnWriter, SerializedFileWriter, SerializedRowGroupWriter};
-use parquet::record::Map;
 use parquet::schema::types::Type;
 use quick_xml::de::from_str;
 use crate::qvd_structure::{QvdFieldHeader, QvdTableHeader};
@@ -89,7 +88,7 @@ pub fn qvd_to_parquet(source_file_name: String,
 
     // Create Parquet Schema
     let mut fields: Vec<Arc<Type>> = Vec::new();
-    for (name, col) in &columns_data {
+    for (name, _) in &columns_data {
         let field_type = match type_dict.get(name).unwrap() {
             SymbolValue::Str(_, _) => Type::primitive_type_builder(name, PhysicalType::BYTE_ARRAY)
                 .with_repetition(Repetition::OPTIONAL)
@@ -123,10 +122,10 @@ pub fn qvd_to_parquet(source_file_name: String,
     // Write Data
     let mut row_group_writer: SerializedRowGroupWriter<_> = writer.next_row_group().map_err(|e| e.to_string())?;
 
-    for (_, mut col_values) in columns_data {
+    for (name, mut col_values) in columns_data {
         let ser_writer: Option<SerializedColumnWriter> = row_group_writer.next_column().map_err(|e| e.to_string())?;
         if let Some(mut col_writer) = ser_writer {
-            match type_dict.get(name).unwrap() {
+            match type_dict.get(&name).unwrap() {
                 SymbolValue::Str(_, _) =>  {
                     if let ColumnWriter::ByteArrayColumnWriter(typed_writer) = col_writer.untyped() {
                         while col_values.has_next(&buf) {
@@ -191,18 +190,11 @@ impl FieldValueIterator {
         }
     }
 
-    fn probe_value(&self) -> SymbolValue {
-        match self.values.get(0) {
-            Some(value) => value.clone(),
-            None => SymbolValue::Int(0)
-        }
-    }
- 
     fn infer_type(&self) -> SymbolValue {
         let mut i:usize = 0;
         let len = self.values.len();
         let mut _type: SymbolValue = SymbolValue::Int(0);
-        while(i < len) {
+        while i < len {
             match self.values.get(i) {
                 Some(SymbolValue::Str(_, _)) => return SymbolValue::Str(0, 0),
                 Some(SymbolValue::Int(_)) => continue,
