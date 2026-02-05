@@ -1,19 +1,21 @@
-use std::collections::HashMap;
-use std::fs::File;
-use std::io;
-use std::io::{BufRead, Read, Seek, SeekFrom};
-use std::path::Path;
-use std::sync::Arc;
+use crate::qvd_structure::{QvdFieldHeader, QvdTableHeader};
 use bitvec::order::Msb0;
 use bitvec::prelude::BitSlice;
 use parquet::basic::{ConvertedType, Repetition, Type as PhysicalType};
 use parquet::column::writer::ColumnWriter;
 use parquet::data_type::ByteArray;
 use parquet::file::properties::WriterProperties;
-use parquet::file::writer::{SerializedColumnWriter, SerializedFileWriter, SerializedRowGroupWriter};
+use parquet::file::writer::{
+    SerializedColumnWriter, SerializedFileWriter, SerializedRowGroupWriter,
+};
 use parquet::schema::types::Type;
 use quick_xml::de::from_str;
-use crate::qvd_structure::{QvdFieldHeader, QvdTableHeader};
+use std::collections::HashMap;
+use std::fs::File;
+use std::io;
+use std::io::{BufRead, Read, Seek, SeekFrom};
+use std::path::Path;
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 enum SymbolValue {
@@ -23,15 +25,14 @@ enum SymbolValue {
 }
 
 impl SymbolValue {
-
     fn get_byte_array(&self, buf: &[u8]) -> ByteArray {
         match self {
             SymbolValue::Str(start, end) => {
                 let utf8_bytes = &buf[*start..*end];
                 utf8_bytes.into()
             }
-            SymbolValue::Int(i) => { i.to_string().as_bytes().into() }
-            SymbolValue::Double(d) => { d.to_string().as_bytes().into() }
+            SymbolValue::Int(i) => i.to_string().as_bytes().into(),
+            SymbolValue::Double(d) => d.to_string().as_bytes().into(),
         }
     }
 
@@ -41,8 +42,8 @@ impl SymbolValue {
                 let utf8_bytes = String::from_utf8_lossy(&buf[*start..*end]).into_owned();
                 utf8_bytes.parse::<i32>().unwrap_or(0)
             }
-            SymbolValue::Int(i) => { *i }
-            SymbolValue::Double(d) => { d.round() as i32 }
+            SymbolValue::Int(i) => *i,
+            SymbolValue::Double(d) => d.round() as i32,
         }
     }
 
@@ -52,14 +53,13 @@ impl SymbolValue {
                 let utf8_bytes = String::from_utf8_lossy(&buf[*start..*end]).into_owned();
                 utf8_bytes.parse::<f64>().unwrap_or(0.0)
             }
-            SymbolValue::Int(i) => { *i as f64 }
-            SymbolValue::Double(d) => { *d }
+            SymbolValue::Int(i) => *i as f64,
+            SymbolValue::Double(d) => *d,
         }
     }
 }
 
-pub fn qvd_to_parquet(source_file_name: String,
-                                target_file_name: String) -> Result<(), String>{
+pub fn qvd_to_parquet(source_file_name: String, target_file_name: String) -> Result<(), String> {
     let xml: String = get_xml_data(&source_file_name).map_err(|e| e.to_string())?;
     let binary_section_offset = xml.as_bytes().len();
     let qvd_structure: QvdTableHeader = from_str(&xml).map_err(|e| e.to_string())?;
@@ -78,7 +78,7 @@ pub fn qvd_to_parquet(source_file_name: String,
 
         columns_data.push((field_name, iterator));
     }
-    
+
     let mut type_dict: HashMap<String, SymbolValue> = HashMap::new();
 
     for (name, col) in &columns_data {
@@ -117,40 +117,50 @@ pub fn qvd_to_parquet(source_file_name: String,
     // Create Parquet Writer
     let file: File = File::create(&target_file_name).map_err(|e| e.to_string())?;
     let props = Arc::new(WriterProperties::builder().build());
-    let mut writer: SerializedFileWriter<File> = SerializedFileWriter::new(file, schema_ptr, props).map_err(|e| e.to_string())?;
+    let mut writer: SerializedFileWriter<File> =
+        SerializedFileWriter::new(file, schema_ptr, props).map_err(|e| e.to_string())?;
 
     // Write Data
-    let mut row_group_writer: SerializedRowGroupWriter<_> = writer.next_row_group().map_err(|e| e.to_string())?;
+    let mut row_group_writer: SerializedRowGroupWriter<_> =
+        writer.next_row_group().map_err(|e| e.to_string())?;
 
     for (name, mut col_values) in columns_data {
-        let ser_writer: Option<SerializedColumnWriter> = row_group_writer.next_column().map_err(|e| e.to_string())?;
+        let ser_writer: Option<SerializedColumnWriter> =
+            row_group_writer.next_column().map_err(|e| e.to_string())?;
         if let Some(mut col_writer) = ser_writer {
             match type_dict.get(&name).unwrap() {
-                SymbolValue::Str(_, _) =>  {
-                    if let ColumnWriter::ByteArrayColumnWriter(typed_writer) = col_writer.untyped() {
+                SymbolValue::Str(_, _) => {
+                    if let ColumnWriter::ByteArrayColumnWriter(typed_writer) = col_writer.untyped()
+                    {
                         while col_values.has_next(&buf) {
                             let (def_levels, values) = col_values.take_byte_array(&buf, 1000);
-                            typed_writer.write_batch(&values, Some(&def_levels), None).map_err(|e| e.to_string())?;
+                            typed_writer
+                                .write_batch(&values, Some(&def_levels), None)
+                                .map_err(|e| e.to_string())?;
                         }
                     } else {
                         return Err("Unexpected Parquet writer type for UTF8 column".into());
                     }
                 }
-                SymbolValue::Int(_) =>  {
+                SymbolValue::Int(_) => {
                     if let ColumnWriter::Int32ColumnWriter(typed_writer) = col_writer.untyped() {
                         while col_values.has_next(&buf) {
                             let (def_levels, values) = col_values.take_int(&buf, 1000);
-                            typed_writer.write_batch(&values, Some(&def_levels), None).map_err(|e| e.to_string())?;
+                            typed_writer
+                                .write_batch(&values, Some(&def_levels), None)
+                                .map_err(|e| e.to_string())?;
                         }
                     } else {
                         return Err("Unexpected Parquet writer type for INT32 column".into());
                     }
                 }
-                SymbolValue::Double(_)=> {
+                SymbolValue::Double(_) => {
                     if let ColumnWriter::DoubleColumnWriter(typed_writer) = col_writer.untyped() {
                         while col_values.has_next(&buf) {
                             let (def_levels, values) = col_values.take_double(&buf, 1000);
-                            typed_writer.write_batch(&values, Some(&def_levels), None).map_err(|e| e.to_string())?;
+                            typed_writer
+                                .write_batch(&values, Some(&def_levels), None)
+                                .map_err(|e| e.to_string())?;
                         }
                     } else {
                         return Err("Unexpected Parquet writer type for DOUBLE column".into());
@@ -162,50 +172,51 @@ pub fn qvd_to_parquet(source_file_name: String,
         }
     }
 
-    row_group_writer.close().expect("Unable to close row group writer.");
+    row_group_writer
+        .close()
+        .expect("Unable to close row group writer.");
     writer.close().expect("Unable to close writer.");
 
     Ok(())
 }
 
-
 struct FieldValueIterator {
-    i : usize,
+    i: usize,
     field: QvdFieldHeader,
     record_byte_size: usize,
-    values: Vec<SymbolValue>
+    values: Vec<SymbolValue>,
 }
 
 impl FieldValueIterator {
-
-    fn new(field: QvdFieldHeader,
-           rows_start: usize,
-           record_byte_size: usize,
-           values: Vec<SymbolValue>) -> Self {
+    fn new(
+        field: QvdFieldHeader,
+        rows_start: usize,
+        record_byte_size: usize,
+        values: Vec<SymbolValue>,
+    ) -> Self {
         FieldValueIterator {
             i: rows_start,
             field,
             record_byte_size,
-            values
+            values,
         }
     }
 
     fn infer_type(&self) -> SymbolValue {
-        let mut i:usize = 0;
+        let mut i: usize = 0;
         let len = self.values.len();
         let mut _type: SymbolValue = SymbolValue::Int(0);
         while i < len {
-            match self.values.get(i) {
+            i += 1;
+            match self.values.get(i-1) {
                 Some(SymbolValue::Str(_, _)) => return SymbolValue::Str(0, 0),
                 Some(SymbolValue::Int(_)) => continue,
-                Some(SymbolValue::Double(_)) =>
-                    match _type {
-                        SymbolValue::Int(_) => _type = SymbolValue::Double(0.0),
-                        _ => continue,
-                    }
-                None => continue
+                Some(SymbolValue::Double(_)) => match _type {
+                    SymbolValue::Int(_) => _type = SymbolValue::Double(0.0),
+                    _ => continue,
+                },
+                None => continue,
             }
-            i += 1;
         }
         _type
     }
@@ -247,7 +258,7 @@ impl FieldValueIterator {
                 Some(s) => {
                     values.push(s.get_byte_array(buf));
                     def_levels.push(1);
-                },
+                }
                 None => {
                     def_levels.push(0);
                 }
@@ -256,7 +267,7 @@ impl FieldValueIterator {
         (def_levels, values)
     }
 
-    fn take_int(&mut self, buf: &[u8], num: usize) -> (Vec<i16>, Vec<i32>)  {
+    fn take_int(&mut self, buf: &[u8], num: usize) -> (Vec<i16>, Vec<i32>) {
         let indices = self.take_indices(buf, num);
         let mut values: Vec<i32> = Vec::with_capacity(num);
         let mut def_levels: Vec<i16> = Vec::with_capacity(num);
@@ -266,7 +277,7 @@ impl FieldValueIterator {
                 Some(s) => {
                     values.push(s.get_int(buf));
                     def_levels.push(1);
-                },
+                }
                 None => {
                     def_levels.push(0);
                 }
@@ -275,7 +286,7 @@ impl FieldValueIterator {
         (def_levels, values)
     }
 
-    fn take_double(&mut self, buf: &[u8], num: usize) -> (Vec<i16>, Vec<f64>)  {
+    fn take_double(&mut self, buf: &[u8], num: usize) -> (Vec<i16>, Vec<f64>) {
         let indices = self.take_indices(buf, num);
         let mut values: Vec<f64> = Vec::with_capacity(num);
         let mut def_levels: Vec<i16> = Vec::with_capacity(num);
@@ -285,7 +296,7 @@ impl FieldValueIterator {
                 Some(s) => {
                     values.push(s.get_double(buf));
                     def_levels.push(1);
-                },
+                }
                 None => {
                     def_levels.push(0);
                 }
@@ -297,7 +308,6 @@ impl FieldValueIterator {
     fn has_next(&self, buf: &[u8]) -> bool {
         self.i + self.record_byte_size <= buf.len()
     }
-
 }
 
 fn get_symbols_as_values(buf: &[u8], field: &QvdFieldHeader) -> Vec<SymbolValue> {
@@ -312,13 +322,15 @@ fn get_symbols_as_values(buf: &[u8], field: &QvdFieldHeader) -> Vec<SymbolValue>
         match byte {
             0 => {
                 // String terminator: collect the string that started after 0x04/0x05/0x06 marker
-                
+
                 values.push(SymbolValue::Str(string_start, i));
                 i += 1;
             }
             1 => {
                 // 4 byte integer (little endian)
-                if i + 4 >= buf.len() { break; }
+                if i + 4 >= buf.len() {
+                    break;
+                }
                 let byte_array: [u8; 4] = [buf[i + 1], buf[i + 2], buf[i + 3], buf[i + 4]];
                 let numeric_value = i32::from_le_bytes(byte_array);
                 values.push(SymbolValue::Int(numeric_value));
@@ -326,10 +338,18 @@ fn get_symbols_as_values(buf: &[u8], field: &QvdFieldHeader) -> Vec<SymbolValue>
             }
             2 => {
                 // 8 byte double (little endian)
-                if i + 8 >= buf.len() { break; }
+                if i + 8 >= buf.len() {
+                    break;
+                }
                 let byte_array: [u8; 8] = [
-                    buf[i + 1], buf[i + 2], buf[i + 3], buf[i + 4],
-                    buf[i + 5], buf[i + 6], buf[i + 7], buf[i + 8]
+                    buf[i + 1],
+                    buf[i + 2],
+                    buf[i + 3],
+                    buf[i + 4],
+                    buf[i + 5],
+                    buf[i + 6],
+                    buf[i + 7],
+                    buf[i + 8],
                 ];
                 let numeric_value = f64::from_le_bytes(byte_array);
                 values.push(SymbolValue::Double(numeric_value));
@@ -359,7 +379,6 @@ fn get_symbols_as_values(buf: &[u8], field: &QvdFieldHeader) -> Vec<SymbolValue>
     values
 }
 
-
 fn read_qvd_to_buf(mut f: File, binary_section_offset: usize) -> Vec<u8> {
     f.seek(SeekFrom::Start(binary_section_offset as u64))
         .unwrap();
@@ -384,7 +403,7 @@ fn bitslice_to_vec(bitslice: &BitSlice<u8, Msb0>) -> Vec<u8> {
     for bit in bitslice {
         let val = match *bit {
             true => 1,
-            false => 0
+            false => 0,
         };
         v.push(val);
     }

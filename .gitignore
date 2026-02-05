@@ -21,4 +21,7 @@ clients.qvd
 *.pyc
 *.pyd
 
+*.qvd
+*.parquet
+
 .DS_Store
